@@ -1,3 +1,5 @@
+use super::kak;
+use super::{Error, Result};
 use crossbeam_channel::Sender;
 use std::borrow::Cow;
 use std::io::prelude::*;
@@ -5,68 +7,38 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::thread;
 
-use super::kak;
-use super::Error;
-
 const END_TOKEN: &str = "<<EEND>>";
 
-#[allow(unused)]
-#[derive(Debug)]
-pub struct Session {
-    name: String,
-    pwd: String,
-    clients: Vec<Client>,
-}
-
-impl Session {
-    fn new(name: String, pwd: String, clients: Vec<Client>) -> Self {
-        Session { name, pwd, clients }
-    }
-}
-
-#[allow(unused)]
-#[derive(Debug)]
-pub struct Client {
-    name: String,
-    bufname: String,
-}
-
-impl Client {
-    fn new(name: String, bufname: String) -> Self {
-        Client { name, bufname }
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Context<'a> {
     session: Cow<'a, str>,
-    client: Option<&'a str>,
+    client: Option<Cow<'a, str>>,
     base_path: Rc<PathBuf>,
 }
 
-impl std::fmt::Display for Context<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "session: {}", self.session)?;
-        if let Some(client) = self.client {
-            write!(f, "\nclient: {}", client)?;
-        }
-        Ok(())
-    }
-}
-
 impl<'a> Context<'a> {
-    pub fn new(session: impl Into<Cow<'a, str>>, client: Option<&'a str>) -> Self {
+    pub fn new<S>(session: S, client: Option<S>) -> Self
+    where
+        S: Into<Cow<'a, str>>,
+    {
         let session = session.into();
         let mut path = std::env::temp_dir();
-        let mut base = String::from("kamp-");
-        base.push_str(&session);
-        path.push(base);
+        path.push(format!("kamp-{}", session));
 
         Context {
             session,
-            client: client.filter(|&client| !client.is_empty()),
+            client: client.map(Into::into),
             base_path: Rc::new(path),
         }
+    }
+
+    pub fn set_client(&mut self, client: impl Into<Cow<'a, str>>) {
+        let client = client.into();
+        self.client = if client.is_empty() {
+            None
+        } else {
+            Some(client)
+        };
     }
 
     pub fn session(&self) -> Cow<'a, str> {
@@ -77,7 +49,7 @@ impl<'a> Context<'a> {
         self.client.is_none()
     }
 
-    pub fn send_kill(&self, exit_status: Option<i32>) -> Result<(), Error> {
+    pub fn send_kill(self, exit_status: Option<i32>) -> Result<()> {
         let mut cmd = String::from("kill");
         if let Some(status) = exit_status {
             cmd.push(' ');
@@ -88,18 +60,19 @@ impl<'a> Context<'a> {
         self.check_status(status)
     }
 
-    pub fn send<S: AsRef<str>>(&self, body: S, buffer: Option<String>) -> Result<String, Error> {
-        let eval_ctx = match (buffer.as_deref(), self.client) {
-            (Some(b), _) => Some((" -buffer ", b)),
-            (_, Some(c)) => Some((" -client ", c)),
-            // 'get val client_list' for example doesn't need neither buffer nor client
-            (None, None) => None,
-        };
+    pub fn send(&self, body: impl AsRef<str>, buffer: Option<String>) -> Result<String> {
         let mut cmd = String::from("try %{\n");
         cmd.push_str("eval");
-        if let Some((ctx, name)) = eval_ctx {
-            cmd.push_str(ctx);
-            cmd.push_str(name);
+        match (&buffer, &self.client) {
+            (Some(b), _) => {
+                cmd.push_str(" -buffer ");
+                cmd.push_str(b);
+            }
+            (_, Some(c)) => {
+                cmd.push_str(" -client ");
+                cmd.push_str(c);
+            }
+            _ => (), // 'get val client_list' for example doesn't need neither buffer nor client
         }
         cmd.push_str(" %{\n");
         cmd.push_str(body.as_ref());
@@ -123,7 +96,7 @@ impl<'a> Context<'a> {
         res
     }
 
-    pub fn connect<S: AsRef<str>>(&self, body: S) -> Result<(), Error> {
+    pub fn connect(&self, body: impl AsRef<str>) -> Result<()> {
         let mut cmd = String::new();
         let body = body.as_ref();
         if !body.is_empty() {
@@ -156,7 +129,7 @@ impl<'a> Context<'a> {
                 let status = kak_h.join().unwrap()?;
                 return self
                     .check_status(status)
-                    .and_then(|_| Err(Error::Other(anyhow::Error::new(recv_err))));
+                    .and_then(|_| Err(anyhow::Error::new(recv_err).into()));
             }
         };
         if res.is_ok() {
@@ -171,35 +144,64 @@ impl<'a> Context<'a> {
         res.map(drop)
     }
 
-    pub fn session_struct(&self) -> Result<Session, Error> {
-        use super::cmd::Get;
-        Get::new_val("client_list")
-            .run(self, 0, None)
-            .and_then(|clients| {
-                clients
-                    .lines()
-                    .map(|name| {
-                        Get::new_val("bufname")
-                            .run(&self.clone_with_client(Some(name)), 2, None)
-                            .map(|bufname| Client::new(name.into(), bufname))
-                    })
-                    .collect::<Result<Vec<Client>, Error>>()
-            })
-            .and_then(|clients| {
-                Get::new_sh("pwd")
-                    .run(self, 2, None)
-                    .map(|pwd| Session::new(self.session().into_owned(), pwd, clients))
-            })
+    pub fn query_val(
+        &self,
+        name: impl AsRef<str>,
+        rawness: u8,
+        buffer: Option<String>,
+    ) -> Result<String> {
+        self.query_kak(("val", name.as_ref()), rawness, buffer)
+    }
+
+    pub fn query_opt(
+        &self,
+        name: impl AsRef<str>,
+        rawness: u8,
+        buffer: Option<String>,
+    ) -> Result<String> {
+        self.query_kak(("opt", name.as_ref()), rawness, buffer)
+    }
+
+    pub fn query_reg(&self, name: impl AsRef<str>) -> Result<String> {
+        self.query_kak(("reg", name.as_ref()), 2, None)
+    }
+
+    pub fn query_sh(
+        &self,
+        cmd: impl AsRef<str>,
+        rawness: u8,
+        buffer: Option<String>,
+    ) -> Result<String> {
+        self.query_kak(("sh", cmd.as_ref()), rawness, buffer)
     }
 }
 
 impl<'a> Context<'a> {
-    fn clone_with_client(&self, client: Option<&'a str>) -> Self {
-        Context {
-            session: self.session.clone(),
-            client: client.filter(|&client| !client.is_empty()),
-            base_path: Rc::clone(&self.base_path),
+    fn query_kak(&self, kv: (&str, &str), rawness: u8, buffer: Option<String>) -> Result<String> {
+        let mut buf = String::from("echo -quoting ");
+        match rawness {
+            0 | 1 => buf.push_str("kakoune"),
+            _ => buf.push_str("raw"),
         }
+        buf.push_str(" -to-file %opt{kamp_out} %");
+        buf.push_str(kv.0);
+        buf.push('{');
+        buf.push_str(kv.1);
+        buf.push('}');
+        self.send(&buf, buffer).map(|s| {
+            if rawness == 0 {
+                s.split('\'').filter(|&s| !s.trim().is_empty()).fold(
+                    String::new(),
+                    |mut buf, next| {
+                        buf.push_str(next);
+                        buf.push('\n');
+                        buf
+                    },
+                )
+            } else {
+                s
+            }
+        })
     }
     fn get_out_path(&self, err_out: bool) -> PathBuf {
         if err_out {
@@ -208,7 +210,7 @@ impl<'a> Context<'a> {
             self.base_path.with_extension("out")
         }
     }
-    fn check_status(&self, status: std::process::ExitStatus) -> Result<(), Error> {
+    fn check_status(&self, status: std::process::ExitStatus) -> Result<()> {
         if status.success() {
             return Ok(());
         }
@@ -217,7 +219,7 @@ impl<'a> Context<'a> {
                 session: self.session().into_owned(),
                 exit_code: code,
             },
-            None => Error::Other(anyhow::Error::msg("kak terminated by signal")),
+            None => anyhow::Error::msg("kak terminated by signal").into(),
         };
         Err(err)
     }
@@ -225,7 +227,7 @@ impl<'a> Context<'a> {
 
 fn read_err(
     file_path: PathBuf,
-    send_ch: Sender<Result<String, Error>>,
+    send_ch: Sender<Result<String>>,
 ) -> thread::JoinHandle<anyhow::Result<()>> {
     thread::spawn(move || {
         let mut buf = String::new();
@@ -241,7 +243,7 @@ fn read_err(
 
 fn read_out(
     file_path: PathBuf,
-    send_ch: Sender<Result<String, Error>>,
+    send_ch: Sender<Result<String>>,
 ) -> thread::JoinHandle<anyhow::Result<()>> {
     thread::spawn(move || {
         let mut buf = String::new();

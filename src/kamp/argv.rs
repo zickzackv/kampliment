@@ -62,11 +62,11 @@ pub(crate) struct AttachOptions {
     pub buffer: Option<String>,
 }
 
-/// list sessions
+/// list session(s)
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "list")]
 pub(crate) struct ListOptions {
-    /// switch to buffer
+    /// all sessions
     #[argh(switch, short = 'a')]
     pub all: bool,
 }
@@ -94,42 +94,21 @@ pub(crate) struct EditOptions {
 #[argh(subcommand, name = "send")]
 pub(crate) struct SendOptions {
     /// buffer context
-    #[argh(option, short = 'b', arg_name = "buffer")]
+    /// or '*' for all non-debug buffers
+    #[argh(option, short = 'b', long = "buffer", arg_name = "buffer")]
     pub buffers: Vec<String>,
 
     /// command to send
-    #[argh(positional)]
-    pub command: String,
-
-    /// the rest of the command if any joined by spaces
-    #[argh(positional)]
-    pub rest: Vec<String>,
+    #[argh(positional, greedy)]
+    pub command: Vec<String>,
 }
 
 /// get state from a session in context
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "get")]
 pub(crate) struct GetOptions {
-    /// raw output
-    #[argh(switch, short = 'r')]
-    pub raw: u8,
-
-    /// buffer context, repeat for several buffers
-    /// or * for all non-debug buffers
-    #[argh(option, short = 'b', arg_name = "buffer")]
-    pub buffers: Vec<String>,
-
     #[argh(subcommand)]
     pub subcommand: GetSubCommand,
-}
-
-/// print buffer content
-#[derive(FromArgs, PartialEq, Debug)]
-#[argh(subcommand, name = "cat")]
-pub(crate) struct CatOptions {
-    /// buffer context
-    #[argh(option, short = 'b', arg_name = "buffer")]
-    pub buffers: Vec<String>,
 }
 
 #[derive(FromArgs, PartialEq, Debug)]
@@ -138,14 +117,24 @@ pub(crate) enum GetSubCommand {
     Val(ValueName),
     Opt(OptionName),
     Reg(RegisterName),
-    Shell(ShellCmdName),
+    Shell(ShellCommand),
 }
 
 /// value name
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "val")]
 pub(crate) struct ValueName {
-    /// value name
+    /// buffer context
+    /// or '*' for all non-debug buffers
+    #[argh(option, short = 'b', long = "buffer", arg_name = "buffer")]
+    pub buffers: Vec<String>,
+
+    /// raw output:
+    /// single switch includes quoting double switch omits quoting
+    #[argh(switch, short = 'r', long = "raw")]
+    pub rawness: u8,
+
+    /// value name to query
     #[argh(positional)]
     pub name: String,
 }
@@ -154,7 +143,17 @@ pub(crate) struct ValueName {
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "opt")]
 pub(crate) struct OptionName {
-    /// option name
+    /// buffer context
+    /// or '*' for all non-debug buffers
+    #[argh(option, short = 'b', long = "buffer", arg_name = "buffer")]
+    pub buffers: Vec<String>,
+
+    /// raw output:
+    /// single switch includes quoting double switch omits quoting
+    #[argh(switch, short = 'r', long = "raw")]
+    pub rawness: u8,
+
+    /// option name to query
     #[argh(positional)]
     pub name: String,
 }
@@ -163,18 +162,38 @@ pub(crate) struct OptionName {
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "reg")]
 pub(crate) struct RegisterName {
-    /// register name
-    #[argh(positional)]
+    /// register name to query, " is default
+    #[argh(positional, default = r#"String::from("dquote")"#)]
     pub name: String,
 }
 
 /// shell command
 #[derive(FromArgs, PartialEq, Eq, Debug)]
 #[argh(subcommand, name = "sh")]
-pub(crate) struct ShellCmdName {
-    /// shell command
-    #[argh(positional, arg_name = "command")]
-    pub name: String,
+pub(crate) struct ShellCommand {
+    /// buffer context
+    /// or '*' for all non-debug buffers
+    #[argh(option, short = 'b', long = "buffer", arg_name = "buffer")]
+    pub buffers: Vec<String>,
+
+    /// raw output:
+    /// single switch includes quoting double switch omits quoting
+    #[argh(switch, short = 'r', long = "raw")]
+    pub rawness: u8,
+
+    /// shell command to evaluate
+    #[argh(positional, greedy)]
+    pub command: Vec<String>,
+}
+
+/// print buffer content
+#[derive(FromArgs, PartialEq, Debug)]
+#[argh(subcommand, name = "cat")]
+pub(crate) struct CatOptions {
+    /// buffer context
+    /// or '*' for all non-debug buffers
+    #[argh(option, short = 'b', long = "buffer", arg_name = "buffer")]
+    pub buffers: Vec<String>,
 }
 
 #[derive(PartialEq, Eq, Debug)]
