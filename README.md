@@ -1,6 +1,6 @@
-# Kampliment
+# Kamp
 
-Kampliment is a tool to control [Kakoune](https://github.com/mawww/kakoune) editor from the command line.
+Kamp is a tool to control [Kakoune](https://github.com/mawww/kakoune) editor from the command line.
 
 ## Installation
 
@@ -29,7 +29,6 @@ The [scripts](scripts) need to be added to `$PATH` in order to use them.
 | [`kamp-buffers`](scripts/kamp-buffers)     | pick buffers (fzf)               |
 | [`kamp-files`](scripts/kamp-files)         | pick files (fzf)                 |
 | [`kamp-filetypes`](scripts/kamp-filetypes) | set filetype (fzf)               |
-| [`kamp-gitls`](scripts/kamp-gitls)         | pick from `git ls-files` (fzf)   |
 | [`kamp-lines`](scripts/kamp-lines)         | search lines in buffer (fzf)     |
 | [`kamp-sessions`](scripts/kamp-sessions)   | attach session and pick a buffer |
 | [`kamp-grep`](scripts/kamp-grep)           | grep interactively with fzf      |
@@ -37,12 +36,15 @@ The [scripts](scripts) need to be added to `$PATH` in order to use them.
 
 ### Kakoune mappings example
 
+Following mappings use [tmux-terminal-popup](https://github.com/alexherbo2/tmux.kak/blob/716d8a49be26b6c2332ad4f3c5342e485e02dff4/docs/manual.md#tmux-terminal-popup) as popup implementation.
+
 ```kak
-map global normal -docstring 'terminal'      <c-t> ': connect terminal<ret>'
-map global normal -docstring 'files'         <c-f> ': connect terminal-popup kamp-files<ret>'
-map global normal -docstring 'buffers'       <c-b> ': connect terminal-popup kamp-buffers<ret>'
-map global normal -docstring 'grep all'      <c-g> ': connect terminal-popup kamp-grep<ret>'
-map global normal -docstring 'grep filetype' <c-y> ': connect terminal-popup kamp-grep -t %opt{filetype}<ret>'
+alias global popup tmux-terminal-popup
+map global normal -docstring 'files'          <c-f> ':connect popup kamp-files<ret>'
+map global normal -docstring 'git ls-files'   <c-l> ':connect popup kamp-files backend=git<ret>'
+map global normal -docstring 'buffers'        <c-b> ':connect popup kamp-buffers<ret>'
+map global normal -docstring 'grep selection' <c-g> ':connect popup kamp-grep "query=%val{selection}"<ret>'
+map global normal -docstring 'grep limit by filetype' <c-y> ':connect popup kamp-grep -t %opt{filetype}<ret>'
 ```
 
 ## Shell integration
@@ -62,7 +64,7 @@ alias kopt='kamp get opt'
 alias kreg='kamp get reg'
 alias kcd-pwd='cd "$(kamp get sh pwd)"'
 alias kcd-buf='cd "$(dirname $(kamp get val buffile))"'
-alias kft='kamp get opt -b \* filetype | sort | uniq' # list file types you're working on
+alias kft='kamp get opt -b \* -s filetype | sort | uniq' # list file types you're working on
 ```
 
 ## Similar projects

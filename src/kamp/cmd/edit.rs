@@ -1,11 +1,9 @@
-use std::fmt::Write;
 use std::path::Path;
 use std::path::PathBuf;
 
-use super::Context;
-use super::Error;
+use super::{Context, Error, Result};
 
-pub(crate) fn edit(ctx: Context, files: Vec<String>) -> Result<(), Error> {
+pub(crate) fn edit(ctx: Context, focus: bool, files: Vec<String>) -> Result<()> {
     let mut buf = String::new();
     let mut pair = [None; 2];
     let mut coord = None;
@@ -27,16 +25,30 @@ pub(crate) fn edit(ctx: Context, files: Vec<String>) -> Result<(), Error> {
         }
     }
 
-    for file in files[i..].iter().rev().chain(pair.into_iter().flatten()) {
+    for (i, file) in files[i..]
+        .iter()
+        .rev()
+        .chain(pair.into_iter().flatten())
+        .enumerate()
+    {
         let p = std::fs::canonicalize(file).unwrap_or_else(|_| PathBuf::from(file));
-        writeln!(&mut buf, "edit -existing '{}'", p.display())?;
+        if let Some(p) = p.as_path().to_str() {
+            if i != 0 {
+                buf.push('\n');
+            }
+            buf.push_str("edit -existing '");
+            if p.contains('\'') {
+                buf.push_str(&p.replace('\'', "''"));
+            } else {
+                buf.push_str(p);
+            }
+            buf.push('\'');
+        }
     }
-
-    buf.pop(); // pops '\n'
 
     if let Some(v) = coord {
         for item in v {
-            buf.push_str(&format!(" {}", item));
+            buf.push_str(&format!(" {item}"));
         }
     }
 
@@ -47,13 +59,15 @@ pub(crate) fn edit(ctx: Context, files: Vec<String>) -> Result<(), Error> {
     if ctx.is_draft() {
         ctx.connect(&buf) // this one acts like attach
     } else {
-        buf.push_str("\nfocus");
+        if focus {
+            buf.push_str("\nfocus");
+        }
         ctx.send(&buf, None).map(drop)
     }
 }
 
 // assuming coord starts with '+'
-fn parse(coord: &str) -> Result<Vec<i32>, Error> {
+fn parse(coord: &str) -> Result<Vec<i32>> {
     // parsing first value as '+n' so '+:<n>' will fail
     coord
         .splitn(2, ':')
@@ -71,7 +85,7 @@ fn parse(coord: &str) -> Result<Vec<i32>, Error> {
 mod tests {
     use super::*;
     #[test]
-    fn test_parse_ok() -> Result<(), Error> {
+    fn test_parse_ok() -> Result<()> {
         assert_eq!(parse("+1")?, vec![1]);
         assert_eq!(parse("+1:")?, vec![1]);
         assert_eq!(parse("+1:1")?, vec![1, 1]);

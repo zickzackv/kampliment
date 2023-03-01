@@ -11,8 +11,12 @@ pub(super) struct Kampliment {
     #[argh(option, short = 'c')]
     pub client: Option<String>,
 
+    /// display version and exit
+    #[argh(switch, short = 'v')]
+    pub version: bool,
+
     #[argh(subcommand)]
-    pub subcommand: SubCommand,
+    pub subcommand: Option<SubCommand>,
 }
 
 #[derive(FromArgs, PartialEq, Debug)]
@@ -26,8 +30,6 @@ pub(super) enum SubCommand {
     List(ListOptions),
     Get(GetOptions),
     Cat(CatOptions),
-    Ctx(CtxOptions),
-    Version(VersionOptions),
 }
 
 /// kakoune init
@@ -42,16 +44,6 @@ pub(crate) struct InitOptions {
     #[argh(option, short = 'e')]
     pub export: Vec<KeyValue>,
 }
-
-/// show execution context
-#[derive(FromArgs, PartialEq, Debug)]
-#[argh(subcommand, name = "ctx")]
-pub(crate) struct CtxOptions {}
-
-/// display version
-#[derive(FromArgs, PartialEq, Debug)]
-#[argh(subcommand, name = "version")]
-pub(crate) struct VersionOptions {}
 
 /// attach to a session in context
 #[derive(FromArgs, PartialEq, Debug)]
@@ -84,8 +76,12 @@ pub(crate) struct KillOptions {
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "edit")]
 pub(crate) struct EditOptions {
+    /// focus client
+    #[argh(switch, short = 'f')]
+    pub focus: bool,
+
     /// path to file
-    #[argh(positional, arg_name = "file")]
+    #[argh(positional, greedy, arg_name = "file")]
     pub files: Vec<String>,
 }
 
@@ -129,10 +125,17 @@ pub(crate) struct ValueName {
     #[argh(option, short = 'b', long = "buffer", arg_name = "buffer")]
     pub buffers: Vec<String>,
 
-    /// raw output:
-    /// single switch includes quoting double switch omits quoting
-    #[argh(switch, short = 'r', long = "raw")]
-    pub rawness: u8,
+    /// quoting style kakoune, discards any --split
+    #[argh(switch, short = 'q')]
+    pub quote: bool,
+
+    /// split by new line, for example 'buflist' value
+    #[argh(switch, short = 's')]
+    pub split: bool,
+
+    /// split by null character
+    #[argh(switch, short = 'z')]
+    pub zplit: bool,
 
     /// value name to query
     #[argh(positional)]
@@ -148,10 +151,17 @@ pub(crate) struct OptionName {
     #[argh(option, short = 'b', long = "buffer", arg_name = "buffer")]
     pub buffers: Vec<String>,
 
-    /// raw output:
-    /// single switch includes quoting double switch omits quoting
-    #[argh(switch, short = 'r', long = "raw")]
-    pub rawness: u8,
+    /// quoting style kakoune, discards any --split
+    #[argh(switch, short = 'q')]
+    pub quote: bool,
+
+    /// split by new line, for example 'str-list' type option
+    #[argh(switch, short = 's')]
+    pub split: bool,
+
+    /// split by null character
+    #[argh(switch, short = 'z')]
+    pub zplit: bool,
 
     /// option name to query
     #[argh(positional)]
@@ -162,6 +172,18 @@ pub(crate) struct OptionName {
 #[derive(FromArgs, PartialEq, Debug)]
 #[argh(subcommand, name = "reg")]
 pub(crate) struct RegisterName {
+    /// quoting style kakoune, discards any --split
+    #[argh(switch, short = 'q')]
+    pub quote: bool,
+
+    /// split by new line, for example ':' register
+    #[argh(switch, short = 's')]
+    pub split: bool,
+
+    /// split by null character
+    #[argh(switch, short = 'z')]
+    pub zplit: bool,
+
     /// register name to query, " is default
     #[argh(positional, default = r#"String::from("dquote")"#)]
     pub name: String,
@@ -175,11 +197,6 @@ pub(crate) struct ShellCommand {
     /// or '*' for all non-debug buffers
     #[argh(option, short = 'b', long = "buffer", arg_name = "buffer")]
     pub buffers: Vec<String>,
-
-    /// raw output:
-    /// single switch includes quoting double switch omits quoting
-    #[argh(switch, short = 'r', long = "raw")]
-    pub rawness: u8,
 
     /// shell command to evaluate
     #[argh(positional, greedy)]

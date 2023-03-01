@@ -3,17 +3,17 @@
 # pipe stdin into fifo buffer
 #
 # Example:
-#    make | kamp-fifo
+#    make | kamp-fifo [output_buffer_name]
 
 set -euf
 
 # Fail early if there is no session
-kamp ctx > /dev/null
+kamp > /dev/null
 
 d=$(mktemp -d)
 fifo="$d/fifo"
 
 trap 'rm -rf "$d"; exit' EXIT HUP INT TERM
 mkfifo "$fifo"
-kamp send "edit -scroll -fifo $fifo *fifo*"
+kamp send "edit -scroll -fifo $fifo *${1:-fifo}*"
 cat >"$fifo"

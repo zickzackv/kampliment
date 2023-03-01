@@ -1,9 +1,9 @@
 [package]
-name = "kampliment"
+name = "kamp"
 version = "0.1.2-dev"
 authors = ["Vladimir Bauer <vbauerster@gmail.com>"]
-description = "kampliment is a tool to control kakoune editor from the command line"
-repository = "https://github.com/vbauerster/kampliment"
+description = "kamp is a tool to control kakoune editor from the command line"
+repository = "https://github.com/vbauerster/kamp"
 keywords = ["kakoune"]
 categories = ["command-line-utilities"]
 license = "Unlicense"
@@ -14,10 +14,10 @@ path = "src/main.rs"
 name = "kamp"
 
 [dependencies]
-anyhow = "1.0.66"
-argh = "0.1.9"
+anyhow = "1.0.68"
+argh = "0.1.10"
 crossbeam-channel = "0.5.6"
-thiserror = "1.0.37"
+thiserror = "1.0.38"
 
 [profile.release]
 lto = true
